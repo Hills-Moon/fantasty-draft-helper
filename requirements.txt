@@ -1,1 +1,7 @@
-streamlit
+streamlit>=1.36
+pandas>=2.0
+requests>=2.31
+python-dotenv>=1.0
+nfl_data_py>=0.3.3
+openai>=1.35
+pyarrow>=15.0
