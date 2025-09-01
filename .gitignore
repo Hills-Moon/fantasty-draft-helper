@@ -207,7 +207,9 @@ marimo/_lsp/
 __marimo__/
 .env
 
-# local secrets & env
-.env
-.venv/
-__pycache__/
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Streamlit secrets (never commit)
+.streamlit/secrets.toml
