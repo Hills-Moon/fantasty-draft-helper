@@ -7,6 +7,15 @@ import streamlit as st
 import requests
 from dotenv import load_dotenv
 
+from dotenv import load_dotenv
+import streamlit as st
+import os
+
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", "")
+if OPENAI_API_KEY:
+    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY  # lets the OpenAI client find it
+  
 # ---------------------- Page & global styles ----------------------
 st.set_page_config(page_title="Fantasy Draft Helper — simple & turn-aware",
                    page_icon="🟣", layout="wide")
