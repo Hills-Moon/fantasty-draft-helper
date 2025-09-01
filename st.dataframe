@@ -188,7 +188,8 @@ if proj_file is not None:
             if c not in user_proj.columns:
                 st.error("Projections CSV must include: name,pos,proj_pg"); st.stop()
         user_proj["pos"] = user_proj["pos"].astype(str).str.upper().str.strip()
-        projections = user_proj[["name","pos","proj_pg"] + (["team","bye"] if "team" in user_proj.columns else [])]
+        extras = [c for c in ["team", "bye"] if c in user_proj.columns]
+        projections = user_proj[["name", "pos", "proj_pg"] + extras]
     except Exception as e:
         st.error(f"Could not read projections CSV: {e}"); st.stop()
 else:
