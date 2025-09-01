@@ -1,10 +1,11 @@
-# app.py — needs-aware, turn-aware draft helper with VORP, risk, tiers & LLM
+# app.py — needs-aware, turn-aware draft helper with VORP, risk, tiers & LLM (no uploads)
 import os, json, math, datetime as dt
+from typing import Optional
+
 import pandas as pd
 import streamlit as st
 import requests
 from dotenv import load_dotenv
-from typing import Optional
 
 # ---------------------- Page & global styles ----------------------
 st.set_page_config(page_title="Fantasy Draft Helper — simple & turn-aware",
@@ -33,7 +34,7 @@ div.stButton > button {{
 }}
 .callout {{
   background:#f5f3ff; border-left:4px solid {PURPLE};
-  padding:.75rem 1rem; margin:.5rem 0 1rem 0; color:#4c1d95;
+  padding:.75rem 1rem; margin:.75rem 0 1rem 0; color:#4c1d95;
 }}
 .callout b {{ color:#4c1d95; }}
 h2, h3 {{ color:{PURPLE}; }}
@@ -55,12 +56,11 @@ with st.expander("What this tool considers (tap to expand)", expanded=True):
     st.markdown(
         "- **ADP (Average Draft Position)** from Fantasy Football Calculator free API "
         "(https://fantasyfootballcalculator.com/api/v1/adp/*scoring*) — used as the market anchor.\n"
-        "- **Projections (optional upload):** if you upload a CSV (`name,pos,proj_pg`), we use those; "
-        "otherwise we fallback to **last season full-PPR points per game** via `nfl_data_py` as a light proxy.\n"
-        "- **VORP (Value Over Replacement Player):** per position from your league’s starter counts.\n"
-        "- **Risk:** probability a player is gone before your next pick (ADP spread model).\n"
-        "- **Turn-aware:** accounts for how many picks occur before your next turn so you don’t get boxed out.\n"
-        "- **Strategy levers:** late-round gates for QB/TE, small stacking bonus between your QB and WR/TE."
+        "- **PPG (Points Per Game)**: always uses **last season full-PPR per-game** via `nfl_data_py`.\n"
+        "- **VORP (Value Over Replacement Player)**: per position from your league’s starter counts.\n"
+        "- **Risk**: probability a player is gone before your next pick (ADP spread model).\n"
+        "- **Turn-aware**: accounts for how many picks happen before your next turn so you don’t get boxed out.\n"
+        "- **Strategy levers**: late-round gates for QB/TE, small stacking bonus between your QB and WR/TE."
     )
 
 # ---------------------- Data loaders ----------------------
@@ -175,26 +175,9 @@ with st.expander("Setup (league, projections, strategy)", expanded=True):
     }
     STRONG_LATE_ROUND = st.checkbox("Make late-round QB/TE more strict", value=False)
 
-    st.markdown("**Projections (optional)** — upload CSV with columns: `name,pos,proj_pg` "
-                "(per-game PPR). If omitted, we’ll use last season PPR/PG.")
-    proj_file = st.file_uploader("Upload projections CSV", type=["csv"])
-
-# ---------------------- Build board ----------------------
+# ---------------------- Build board (always last-season PPR/pg) ----------------------
 adp  = load_adp(teams=int(TEAMS), year=int(ADP_YEAR), scoring=SCORING_MODE)
-if proj_file is not None:
-    try:
-        user_proj = pd.read_csv(proj_file)
-        for c in ["name","pos","proj_pg"]:
-            if c not in user_proj.columns:
-                st.error("Projections CSV must include: name,pos,proj_pg"); st.stop()
-        user_proj["pos"] = user_proj["pos"].astype(str).str.upper().str.strip()
-        extras = [c for c in ["team", "bye"] if c in user_proj.columns]
-        projections = user_proj[["name", "pos", "proj_pg"] + extras]
-    except Exception as e:
-        st.error(f"Could not read projections CSV: {e}"); st.stop()
-else:
-    projections = load_history_latest(latest_season=dt.datetime.now().year-1)
-
+projections = load_history_latest(latest_season=dt.datetime.now().year - 1)
 board = join_board(adp, projections)
 
 # ---------------------- State & draft lists ----------------------
@@ -279,7 +262,7 @@ def compute_vorp(df: pd.DataFrame, teams: int, needs_template: dict, flex_share:
     d["vorp"] = d.apply(lambda r: r["proj_pg"] - repl.get(str(r["pos"]), 0.0), axis=1)
     return d, repl
 
-board_vorp, repl_map = compute_vorp(board, int(TEAMS), NEEDS_TEMPLATE, FLEX_SHARE)
+board_vorp, repl_map = compute_vorp(board, int(TEAMS), NEEDS_TEMPLATE, {"RB":0.5,"WR":0.5,"TE":0.0})
 remaining = board_vorp[~board_vorp["name"].isin(unavailable)].copy()
 
 # ---------------------- Risk model ----------------------
@@ -418,7 +401,7 @@ def llm_suggest(available_df: pd.DataFrame,
         payload = {
             "pick": int(pick_overall),
             "needs": needs,
-            "candidates": candidates,            # ONLY these are valid
+            "candidates": candidates,
             "unavailable": sorted(unavailable),
             "roster": roster,
             "turn": (turn_info or {}),
@@ -442,6 +425,7 @@ def llm_suggest(available_df: pd.DataFrame,
         return resp.choices[0].message.content
     except Exception as e:
         return f"_OpenAI call failed: {e}_"
+
 # ---------------------- Top targets + quick adds ----------------------
 st.subheader(f"Top targets for pick #{int(current_overall)}")
 st.dataframe(
